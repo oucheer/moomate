@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 interface Participant { id: string; nickname: string; avatar: string; tags: string[]; photo_uploaded: boolean; status: string; match_id: string | null }
 interface Room { id: string; code: string; theme: string; status: string; capacity: number }
 interface Match { id: string; participant_a: string; participant_b: string; status: string; reason: string; score: number }
+interface Game { id: string; match_id: string; status: string; card: { reward?: { name?: string; emoji?: string; code?: string; redeemed?: boolean } | null } | null }
 
 export default function HostPage() {
   const params = useParams<{ roomId: string }>();
@@ -13,6 +14,7 @@ export default function HostPage() {
   const [room, setRoom] = useState<Room | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
   const [qr, setQr] = useState("");
   const [joinUrl, setJoinUrl] = useState("");
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,7 @@ export default function HostPage() {
       setRoom(json.room);
       setParticipants(json.participants || []);
       setMatches(json.matches || []);
+      setGames(json.games || []);
       setQr(json.qrDataUrl || "");
       setJoinUrl(json.joinUrl || "");
     } catch (e: any) { setError(e.message); }
@@ -48,6 +51,19 @@ export default function HostPage() {
       await load();
     } catch (e: any) { setError(e.message); }
     finally { setMatching(false); }
+  }
+
+  async function redeem(gameId: string) {
+    setError("");
+    try {
+      const res = await fetch(`/api/games/${gameId}/redeem`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostToken: localStorage.getItem(`host_${roomId}`) }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "核销失败");
+      await load();
+    } catch (e: any) { setError(e.message); }
   }
 
   const nameOf = (id: string) => participants.find((p) => p.id === id)?.nickname || "牛牛";
@@ -122,6 +138,23 @@ export default function HostPage() {
                 <p className="text-[10px] text-amber-300/50 mt-1">
                   状态：{m.status === "pending" ? "待确认" : m.status === "confirmed" ? "已确认" : m.status === "completed" ? "已完成" : "已拒绝"} · 匹配分 {m.score}
                 </p>
+                {(() => {
+                  const g = games.find((x) => x.match_id === m.id);
+                  const rw = g?.card?.reward;
+                  if (!rw) return null;
+                  return (
+                    <div className="mt-2 bg-emerald-900/25 border border-emerald-700/40 rounded-lg px-3 py-2">
+                      <p className="text-xs text-emerald-300">{rw.emoji} {rw.name} · <span className="font-mono">{rw.code}</span></p>
+                      {m.status === "completed" && (
+                        rw.redeemed ? (
+                          <p className="text-xs text-emerald-400 font-bold mt-1">✅ 已核销</p>
+                        ) : (
+                          <button onClick={() => redeem(g.id)} className="mt-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg">核销奖励</button>
+                        )
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>

@@ -109,7 +109,7 @@ export default function MatchPage() {
 
   // 纪念卡
   if (game?.status === "completed" && game.card) {
-    const card = game.card as { title?: string; reason?: string; review?: string; completedAt?: string };
+    const card = game.card as { title?: string; reason?: string; review?: string; completedAt?: string; reward?: { name?: string; desc?: string; emoji?: string; code?: string; redeemed?: boolean } };
     return (
       <main className="min-h-screen px-6 py-12 max-w-md mx-auto text-center">
         <p className="text-5xl mb-4">🏆</p>
@@ -127,6 +127,22 @@ export default function MatchPage() {
               <p className="text-sm text-amber-100/80">{card.review}</p>
             </div>
           </div>
+          {card.reward && (
+            <div className="mt-6 bg-gradient-to-b from-emerald-700/25 to-[#12241c] border border-emerald-500/50 rounded-2xl p-5">
+              <p className="text-xs text-emerald-300 mb-2 text-center">🎁 线下奖励 · 凭码到吧台兑换</p>
+              <p className="text-center text-5xl mb-2">{card.reward.emoji || "🎁"}</p>
+              <p className="text-center font-bold text-lg text-emerald-200 mb-1">{card.reward.name}</p>
+              <p className="text-center text-xs text-emerald-300/70 mb-4">{card.reward.desc}</p>
+              <div className="bg-black/40 border border-emerald-600/50 rounded-xl py-3 text-center">
+                <p className="font-mono font-bold text-xl tracking-widest text-emerald-300">{card.reward.code}</p>
+              </div>
+              <p className="text-center text-[11px] text-emerald-300/60 mt-2">出示此码给主理人 / 吧台工作人员核销</p>
+              {card.reward.redeemed && (
+                <p className="text-center text-sm mt-3 text-emerald-400 font-bold">✅ 已核销</p>
+              )}
+            </div>
+          )}
+
           <div className="mt-6 pt-4 border-t border-amber-800/40 text-center">
             <p className="text-xs text-amber-300/60">Homebar × MooMate · 今晚牛搭子</p>
           </div>
@@ -152,8 +168,16 @@ export default function MatchPage() {
           <h1 className="text-lg font-bold mt-1">第 {round + 1} / 3 轮</h1>
         </div>
 
+        <div className="bg-gradient-to-r from-amber-600/30 to-amber-800/20 border border-amber-500/60 rounded-2xl px-4 py-3 mb-4 flex items-center gap-3">
+          <span className="text-2xl">🍻</span>
+          <div>
+            <p className="text-sm font-bold text-amber-300">线下任务 · 请面对面完成</p>
+            <p className="text-xs text-amber-200/70">和搭子坐在酒吧同一张桌前，各自独立写下答案，再同时揭晓</p>
+          </div>
+        </div>
+
         <div className="bg-[#1d1915] border border-amber-900/40 rounded-3xl p-6 mb-6">
-          <p className="text-sm text-amber-300/80 mb-3">你们可以在酒吧里面对面讨论，但提交时各自独立作答：</p>
+          <p className="text-sm text-amber-300/80 mb-3">酒吧现场 · 各自独立作答后同时揭晓：</p>
           <p className="font-bold text-lg mb-5 leading-relaxed">{q}</p>
           {!myAnswer ? (
             <div className="space-y-3">

@@ -77,8 +77,8 @@ function fallbackReason(): string {
 
 const FALLBACK_QUESTIONS = [
   "如果今晚突然多出两小时，你最想用它们做什么？",
-  "你会用一个什么词形容今晚的气氛？",
-  "如果只能选一样：热闹的音乐、安静角落、有趣的人，你选哪个？",
+  "你觉得对方此刻心里在想什么？猜猜看！",
+  "用一句话向全场推销你的搭档，你会怎么说？",
 ];
 
 export async function aiGameQuestions(a: Record<string, unknown>, b: Record<string, unknown>): Promise<string[]> {
