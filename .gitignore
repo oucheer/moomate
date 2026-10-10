@@ -45,3 +45,6 @@ match-preview.png
 home.png
 home2.png
 supabase/.temp/
+
+# Local Netlify folder
+.netlify

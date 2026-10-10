@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
-// GET /api/rooms/[code]/messages - 房间聊天记录（含发送者昵称头像）
+const VIRTUAL_REPLIES = [
+  "嘿，你也觉得今晚气氛不错吧？",
+  "刚在广场吃草顺便观察全场，你这头牛看着挺有故事😄",
+  "我猜你是气氛组那挂的，没猜错吧？",
+  "来，报上你的理想今晚，我看看咱俩是不是一个频道～",
+  "哈哈这个回答有点东西，继续说",
+];
+
 export async function GET(_req: Request, ctx: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await ctx.params;
@@ -21,7 +28,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ code: string }
   }
 }
 
-// POST /api/rooms/[code]/messages - 发送聊天
 export async function POST(req: Request, ctx: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await ctx.params;
@@ -44,6 +50,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ code: string }
       .select("id, participant_id, content, created_at, participant:participants(nickname, avatar)")
       .single();
     if (error) throw new Error(error.message);
+
+    // 房间里有虚拟牛牛时自动回复一句，让广场有生气
+    const { data: virtualBull } = await sb
+      .from("participants")
+      .select("id")
+      .eq("room_id", room.id)
+      .eq("is_virtual", true)
+      .neq("id", me.id)
+      .maybeSingle();
+    if (virtualBull) {
+      const reply = VIRTUAL_REPLIES[Math.floor(Math.random() * VIRTUAL_REPLIES.length)];
+      await sb.from("room_messages").insert({ room_id: room.id, participant_id: virtualBull.id, content: reply });
+    }
     return NextResponse.json({ message: msg });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "发送失败" }, { status: 500 });

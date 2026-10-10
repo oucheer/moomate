@@ -26,6 +26,7 @@ create table if not exists participants (
   match_id uuid,
   answers jsonb,
   ai_profile jsonb,
+  is_virtual boolean not null default false,
   created_at timestamptz default now()
 );
 

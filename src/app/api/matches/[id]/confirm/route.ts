@@ -12,10 +12,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const isB = body.participantId === match.participant_b;
     if (!isA && !isB) return NextResponse.json({ error: "你不是该匹配的参与者" }, { status: 403 });
 
-    const updates: Record<string, unknown> = isA ? { confirmed_a: true } : { confirmed_b: true };
-    const nowConfirmedA = isA || match.confirmed_a;
-    const nowConfirmedB = isB || match.confirmed_b;
-    if (nowConfirmedA && nowConfirmedB) {
+    // 对方是虚拟牛牛时自动确认，方便单人演示完整流程
+    const otherId = isA ? match.participant_b : match.participant_a;
+    const { data: other } = await sb.from("participants").select("is_virtual").eq("id", otherId).maybeSingle();
+    const autoConfirmOther = Boolean(other?.is_virtual);
+
+    const updates: Record<string, unknown> = {
+      confirmed_a: isA || match.confirmed_a || autoConfirmOther,
+      confirmed_b: isB || match.confirmed_b || autoConfirmOther,
+    };
+    if (updates.confirmed_a && updates.confirmed_b) {
       updates.status = "confirmed";
       await sb.from("participants").update({ status: "confirmed" }).in("id", [match.participant_a, match.participant_b]);
     }
