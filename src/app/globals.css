@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+:root {
+  --background: #12100e;
+  --foreground: #fef3c7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+html {
+  background: #12100e;
+  color-scheme: dark;
+}
+
+/* ===== 牛牛广场动效 ===== */
+@keyframes bull-graze {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0) rotate(0deg); }
+  20% { transform: translate(-50%, -50%) translateY(-4px) rotate(-2.5deg); }
+  40% { transform: translate(-50%, -50%) translateY(0) rotate(0deg); }
+  55% { transform: translate(-50%, -50%) translateY(2px) rotate(1.5deg); }
+  75% { transform: translate(-50%, -50%) translateY(-1px) rotate(0deg); }
+}
+@keyframes bull-wander {
+  0%, 100% { margin-left: 0px; }
+  50% { margin-left: 10px; }
+}
+@keyframes firefly {
+  0%, 100% { opacity: 0.1; transform: translateY(0); }
+  50% { opacity: 0.95; transform: translateY(-6px); }
+}
+@keyframes grass-sway {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(5deg); }
+}
+.bull-anim { animation: bull-graze 5s ease-in-out infinite; }
+.bull-wander { animation: bull-wander 7s ease-in-out infinite; }
+.bull-emoji { display: inline-block; }
+.bull-emoji.flipped { transform: scaleX(-1); }
+.firefly { animation: firefly 2.6s ease-in-out infinite; }
+.grass-sway { animation: grass-sway 3.5s ease-in-out infinite; transform-origin: bottom center; display: inline-block; }
