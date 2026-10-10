@@ -52,6 +52,7 @@ create table if not exists games (
   answers jsonb not null default '{}',
   review text,
   card jsonb,
+  round_feedback jsonb not null default '{}',
   created_at timestamptz default now()
 );
 

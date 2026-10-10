@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { aiGameQuestions } from "@/lib/ai";
+import { aiStagePlan, type StageDef } from "@/lib/ai";
 
+// 创建 4 关线下挑战赛（快答 → 造型拍照 → 酒吧寻宝 → 即兴合演）
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
@@ -13,15 +14,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ error: "无权开始" }, { status: 403 });
     }
 
-    const { data: pa } = await sb.from("participants").select("*").eq("id", match.participant_a).maybeSingle();
-    const { data: pb } = await sb.from("participants").select("*").eq("id", match.participant_b).maybeSingle();
     const { data: existing } = await sb.from("games").select("*").eq("match_id", id).maybeSingle();
     if (existing) return NextResponse.json({ game: existing });
 
-    const questions = await aiGameQuestions(pa, pb);
+    const { data: pa } = await sb.from("participants").select("*").eq("id", match.participant_a).maybeSingle();
+    const { data: pb } = await sb.from("participants").select("*").eq("id", match.participant_b).maybeSingle();
+    const plan: StageDef[] = await aiStagePlan(pa, pb);
     const { data: game, error } = await sb
       .from("games")
-      .insert({ match_id: id, questions, answers: {} })
+      .insert({ match_id: id, type: "牛牛大挑战", questions: plan, answers: {}, round_feedback: {} })
       .select()
       .single();
     if (error) throw new Error(error.message);

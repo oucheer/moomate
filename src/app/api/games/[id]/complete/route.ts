@@ -1,23 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { aiGameReview } from "@/lib/ai";
+import { aiStory, aiGameReview } from "@/lib/ai";
+import { REWARD_POOL, makeRewardCode } from "@/lib/rewards";
+import { createSignedUrl } from "@/lib/photo";
 
-// Homebar 线下奖励池（不含酒精压力，均可用无酒精饮品替换）
-const REWARD_POOL = [
-  { name: "牛牛特调", desc: "吧台为你们定制一杯今晚专属无酒精特调（可自选口味）", emoji: "🍹" },
-  { name: "小食拼盘", desc: "免费兑换一份吧台小食拼盘，两个人一起吃", emoji: "🍿" },
-  { name: "优先入场券", desc: "下一场 Homebar 活动免排队优先入场（两人有效）", emoji: "🎫" },
-  { name: "牛牛周边", desc: "主理人送出牛牛贴纸 / 徽章周边一对", emoji: "🐮" },
-  { name: "拍立得留念", desc: "主理人为你们拍一张拍立得合照，现场带走", emoji: "📸" },
-];
-
-function makeRewardCode(roomCode: string): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let rand = "";
-  for (let i = 0; i < 4; i++) rand += chars[Math.floor(Math.random() * chars.length)];
-  return `MOO-${roomCode}-${rand}`;
-}
-
+// 完成 4 关后：生成 AI 故事 + 总评 + 线下奖励 + 挑战照片纪念集
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
@@ -29,30 +16,65 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!match || ![match.participant_a, match.participant_b].includes(body.participantId)) {
       return NextResponse.json({ error: "无权操作" }, { status: 403 });
     }
-    const expected = 6;
-    if (Object.keys(game.answers || {}).length < expected) {
-      return NextResponse.json({ error: "双方尚未完成全部 3 轮作答" }, { status: 400 });
+    if (game.status === "completed" && game.card) return NextResponse.json({ game });
+
+    const answers = game.answers || {};
+    const fb = game.round_feedback || {};
+    const plan: Array<{ stage: number; type: string; title: string; text: string }> = game.questions || [];
+
+    // 校验 4 关全部完成
+    for (const s of plan) {
+      const a = answers[String(s.stage)];
+      const done = s.type === "quiz" ? Boolean(a?.a && a?.b) : Boolean(a?.photo);
+      if (!done) return NextResponse.json({ error: `第 ${s.stage} 关还未完成` }, { status: 400 });
     }
-    if (game.review) return NextResponse.json({ game });
 
     const { data: room } = await sb.from("rooms").select("code").eq("id", match.room_id).maybeSingle();
     const { data: pa } = await sb.from("participants").select("*").eq("id", match.participant_a).maybeSingle();
     const { data: pb } = await sb.from("participants").select("*").eq("id", match.participant_b).maybeSingle();
-    const review = await aiGameReview(pa, pb, game.answers);
+    const nameA = pa?.nickname || "牛A";
+    const nameB = pb?.nickname || "牛B";
+
+    // 挑战照片签名 URL 纪念集
+    const photoCards: Array<{ stage: number; title: string; url: string }> = [];
+    for (const s of plan) {
+      const a = answers[String(s.stage)];
+      if (a?.photo) {
+        try {
+          const url = await createSignedUrl(a.photo);
+          photoCards.push({ stage: s.stage, title: s.title, url });
+        } catch { /* skip missing photo */ }
+      }
+    }
+
+    // AI 故事 + 总评
+    const summary = plan.map((s) => {
+      const a = answers[String(s.stage)];
+      const f = fb[String(s.stage)];
+      return `[${s.title}] ${s.text} → ${f ? `${f.aName}&${f.bName}：${f.comment}（默契${f.sync}）` : "已完成"}`;
+    }).join("；");
+    const story = await aiStory({ nameA, nameB, challengeSummary: summary });
+    const review = await aiGameReview(pa, pb, { ...answers, feedback: fb });
+
+    // 总默契分
+    const scores = Object.values(fb).map((f: any) => f.sync || 0);
+    const totalSync = scores.length ? Math.round(scores.reduce((x: number, y: number) => x + y, 0) / scores.length) : 60;
+
     const reward = REWARD_POOL[Math.floor(Math.random() * REWARD_POOL.length)];
     const card = {
-      title: `${pa?.nickname || "牛A"} × ${pb?.nickname || "牛B"}`,
+      title: `${nameA} × ${nameB}`,
       reason: match.reason,
       review,
+      story,
+      stats: { totalSync, rounds: plan.length },
+      photos: photoCards,
       completedAt: new Date().toISOString(),
       reward: {
-        name: reward.name,
-        desc: reward.desc,
-        emoji: reward.emoji,
-        code: makeRewardCode(room?.code || "HOME"),
-        redeemed: false,
+        name: reward.name, desc: reward.desc, emoji: reward.emoji,
+        code: makeRewardCode(room?.code || "HOME"), redeemed: false,
       },
     };
+
     const { data, error } = await sb.from("games").update({ status: "completed", review, card }).eq("id", id).select().single();
     if (error) throw new Error(error.message);
     await sb.from("matches").update({ status: "completed" }).eq("id", match.id);
