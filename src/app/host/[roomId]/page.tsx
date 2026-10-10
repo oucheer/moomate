@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 
-interface Participant { id: string; nickname: string; avatar: string; tags: string[]; photo_uploaded: boolean; status: string; match_id: string | null }
+interface Participant { id: string; nickname: string; avatar: string; tags: string[]; photo_uploaded: boolean; status: string; match_id: string | null; is_virtual?: boolean }
 interface Room { id: string; code: string; theme: string; status: string; capacity: number }
 interface Match { id: string; participant_a: string; participant_b: string; status: string; reason: string; score: number }
 interface Game { id: string; match_id: string; status: string; card: { reward?: { name?: string; emoji?: string; code?: string; redeemed?: boolean } | null } | null }
@@ -20,6 +20,9 @@ export default function HostPage() {
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
   const [error, setError] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [demoDone, setDemoDone] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +69,39 @@ export default function HostPage() {
     } catch (e: any) { setError(e.message); }
   }
 
+  async function injectDemo() {
+    setDemoLoading(true); setError("");
+    try {
+      const res = await fetch(`/api/host/${roomId}/demo`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostToken: localStorage.getItem(`host_${roomId}`) }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "注入失败");
+      setDemoDone(true);
+      await load();
+    } catch (e: any) { setError(e.message); }
+    finally { setDemoLoading(false); }
+  }
+
+  async function resetRoom() {
+    if (!confirm("确定重置本场所有配对和游戏记录？所有人将回到等待匹配状态。")) return;
+    setResetting(true); setError("");
+    try {
+      const res = await fetch(`/api/host/${roomId}/reset`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostToken: localStorage.getItem(`host_${roomId}`) }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "重置失败");
+      setDemoDone(false);
+      await load();
+    } catch (e: any) { setError(e.message); }
+    finally { setResetting(false); }
+  }
+
+  const virtualCount = participants.filter((p) => p.is_virtual).length;
+
   const nameOf = (id: string) => participants.find((p) => p.id === id)?.nickname || "牛牛";
 
   if (loading) return <main className="min-h-screen flex items-center justify-center">加载中...</main>;
@@ -105,6 +141,27 @@ export default function HostPage() {
       >
         {matching ? "AI 匹配中..." : "开始 AI 匹配"}
       </button>
+      <div className="grid grid-cols-2 gap-3 mb-6">
+        <button
+          onClick={injectDemo}
+          disabled={demoLoading}
+          className="bg-emerald-700/40 hover:bg-emerald-700/60 border border-emerald-500/50 text-emerald-200 font-bold py-3 rounded-xl text-sm transition disabled:opacity-50"
+        >
+          {demoLoading ? "注入中..." : demoDone ? "🎭 演示牛牛已就位" : "🎭 注入演示牛牛"}
+        </button>
+        <button
+          onClick={resetRoom}
+          disabled={resetting}
+          className="bg-red-900/30 hover:bg-red-900/50 border border-red-700/50 text-red-200 font-bold py-3 rounded-xl text-sm transition disabled:opacity-50"
+        >
+          {resetting ? "重置中..." : "♻️ 重置本局"}
+        </button>
+      </div>
+      {demoDone && virtualCount > 0 && (
+        <p className="text-xs text-emerald-300/70 text-center mb-4 -mt-3">
+          已有 {virtualCount} 头演示牛牛在广场等你，可直接点上方「开始 AI 匹配」
+        </p>
+      )}
       {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
 
       <section className="mb-6">
@@ -112,7 +169,7 @@ export default function HostPage() {
         <div className="space-y-2">
           {participants.map((p) => (
             <div key={p.id} className="bg-[#1d1915] border border-amber-900/40 rounded-xl px-4 py-3 flex items-center gap-3">
-              <span className="text-2xl">🐮</span>
+              <span className="text-2xl">{p.is_virtual ? "🤖" : "🐮"}</span>
               <div className="flex-1">
                 <p className="font-medium">{p.nickname}</p>
                 <p className="text-xs text-amber-300/70">
