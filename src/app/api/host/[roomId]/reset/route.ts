@@ -19,7 +19,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ roomId: string
 
     // 删除顺序：games -> matches（外键依赖，participants.match_id 只是普通列）
     const { data: matchIds } = await sb.from("matches").select("id").eq("room_id", room.id);
-    const ids = (matchIds || []).map((m: any) => m.id);
+    const ids = (matchIds || []).map((m: { id: string }) => m.id);
     if (ids.length > 0) {
       await sb.from("games").delete().in("match_id", ids);
       await sb.from("matches").delete().in("id", ids);

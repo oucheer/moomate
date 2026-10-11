@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 
-interface Match { id: string; participant_a: string; participant_b: string; status: string; reason: string; score: number; confirmed_a: boolean; confirmed_b: boolean }
+interface Match { id: string; participant_a: string; participant_b: string; status: string; reason: string; anchor: string; icebreaker: string; confirmed_a: boolean; confirmed_b: boolean }
 interface Participant { id: string; nickname: string; avatar: string; tags: string[]; photo_uploaded: boolean; status: string }
 interface StageDef { stage: number; type: "quiz" | "pose" | "hunt" | "act"; title: string; text: string; tips?: string[] }
 interface Feedback { comment: string; sync: number; hitA?: boolean; hitB?: boolean; aName?: string; bName?: string }
@@ -111,7 +111,6 @@ export default function MatchPage() {
   const isQuiz = currentStage?.type === "quiz";
   const myQuizDone = isQuiz && curAns && (match?.participant_a === me?.id ? curAns.a : curAns.b);
   const myActionDone = !isQuiz && curAns && (curAns.photo);
-  const canSubmit = isQuiz ? Boolean(myQuizDone || (answer.trim() && (currentStage.stage !== 1 || guess.trim()))) : Boolean(photoFile || myActionDone);
 
   function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -135,7 +134,7 @@ export default function MatchPage() {
       if (!res.ok) throw new Error(json.error || "提交失败");
       setGame(json.game);
       setAnswer(""); setGuess(""); setNote(""); setPhotoFile(null); setPhotoPreview("");
-    } catch (e: any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "提交失败"); }
     finally { setBusy(false); }
   }
 
@@ -150,13 +149,13 @@ export default function MatchPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "生成失败");
       setGame(json.game);
-    } catch (e: any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "生成失败"); }
     finally { setBusy(false); }
   }
 
   useEffect(() => {
     if (match?.status === "confirmed" && me && partner) {
-      fetch(`/api/photos/${partner.id}?viewerId=${me.id}`)
+      fetch(`/api/photos/${partner.id}?viewerId=${me.id}`, { headers: { authorization: `Bearer ${localStorage.getItem(`moomate_auth_${me.id}`) || ""}` } })
         .then((r) => r.ok ? r.json() : null)
         .then((j) => { if (j?.url) setPartnerPhoto(j.url); })
         .catch(() => {});
@@ -382,7 +381,7 @@ export default function MatchPage() {
     <main className="min-h-screen px-6 py-12 max-w-md mx-auto">
       <div className="text-center mb-8">
         <p className="text-4xl mb-3">🎉</p>
-        <h1 className="text-2xl font-bold">AI 为你找到了搭子</h1>
+        <h1 className="text-2xl font-bold">为你找到了今晚的搭子</h1>
       </div>
 
       <div className="bg-gradient-to-b from-amber-800/30 to-[#1d1915] border border-amber-700/50 rounded-3xl p-6 mb-6">
@@ -399,13 +398,18 @@ export default function MatchPage() {
             )}
           </div>
         </div>
-        <p className="text-sm text-amber-100/80 leading-relaxed mb-4">{match.reason}</p>
-        <p className="text-xs text-amber-300/60">匹配分 {match.score} · 匹配机制基于问答 + 兴趣标签</p>
+        <p className="text-sm text-amber-200 font-medium mb-2">共同活动：{match.anchor || "轻松破冰"}</p>
+        <p className="text-sm text-amber-100/80 leading-relaxed mb-3">{match.reason}</p>
+        <p className="text-xs text-amber-300/70">破冰建议：{match.icebreaker || "先聊聊今晚想做的小事"}</p>
+        {me?.tags && me.tags.length > 0 && <div className="mt-4 border-t border-amber-800/40 pt-3">
+          <p className="text-xs text-amber-300/70 mb-2">你的今晚标签</p>
+          <div className="flex flex-wrap gap-1">{me.tags.map((tag) => <span key={tag} className="text-[10px] bg-amber-500/15 text-amber-300 px-2 py-1 rounded-full">{tag}</span>)}</div>
+        </div>}
       </div>
 
       <div className="bg-[#1d1915] border border-amber-900/40 rounded-2xl p-4 mb-6 text-center">
         <p className="text-sm text-amber-300/80">
-          📸 {partnerConfirmed ? "对方已确认，照片解锁！" : "双方确认后解锁彼此照片"}
+          📸 {partner?.photo_uploaded ? (partnerConfirmed ? "双方确认，照片已解锁" : "双方确认后解锁照片") : "对方没有上传照片，可直接线下认识"}
         </p>
         {partnerPhoto && (
           /* eslint-disable-next-line @next/next/no-img-element */

@@ -51,7 +51,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
     }
 
-    const answers: Record<string, any> = { ...(game.answers || {}) };
+    const answers: Record<string, { a?: string; b?: string; guessA?: string | null; guessB?: string | null; aNote?: string; bNote?: string; photo?: string }> = { ...(game.answers || {}) };
     const key = String(stage);
     answers[key] = answers[key] || { a: null, b: null, guessA: null, guessB: null, photo: null };
     if (isA) {
@@ -75,7 +75,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       // 动作关虚拟牛牛自动视为已完成（照片由真人一侧提供即可）
     }
 
-    const fb: Record<string, any> = { ...(game.round_feedback || {}) };
+    const fb: Record<string, { comment?: string; sync?: number; aName?: string; bName?: string; judgedAt?: string }> = { ...(game.round_feedback || {}) };
     const cur = answers[key];
     const bothDone = stageDef.type === "quiz" ? Boolean(cur.a && cur.b) : Boolean((cur.aNote || cur.bNote) && cur.photo);
 
@@ -85,7 +85,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const verdict = await aiJudge({
         stageType: stageDef.type,
         challenge: stageDef.text,
-        aAns: cur.a, bAns: cur.b, guessA: cur.guessA, guessB: cur.guessB,
+        aAns: cur.a, bAns: cur.b, guessA: cur.guessA || undefined, guessB: cur.guessB || undefined,
         photoPath: cur.photo, nameA: pa?.nickname, nameB: pb?.nickname,
       });
       fb[key] = { ...verdict, aName: pa?.nickname || "牛A", bName: pb?.nickname || "牛B", judgedAt: new Date().toISOString() };

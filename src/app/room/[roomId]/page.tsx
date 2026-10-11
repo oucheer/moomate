@@ -2,14 +2,16 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import QuizForm from "@/components/QuizForm";
+import type { QuizAnswers } from "@/types";
 
 interface Participant {
   id: string; nickname: string; avatar: string; tags: string[];
   photo_uploaded: boolean; status: string; match_id: string | null;
   room_id: string; gender: string; gender_preference: string;
-  answers: Record<string, string> | null; ai_profile: { tags?: string[] } | null;
+  answers: QuizAnswers | null; ai_profile: { tags?: string[] } | null;
 }
-interface Match { id: string; participant_a: string; participant_b: string; status: string; reason: string; score: number }
+interface Match { id: string; participant_a: string; participant_b: string; status: string; reason: string; anchor: string; icebreaker: string }
 interface Room { id: string; code: string; theme: string; status: string }
 interface ChatMsg {
   id: string; participant_id: string; content: string; created_at: string;
@@ -18,7 +20,7 @@ interface ChatMsg {
 
 const AVATAR_FALLBACK = "🐮";
 const STATUS_LABEL: Record<string, string> = {
-  waiting: "等待匹配", matched: "已匹配", confirmed: "已确认",
+  waiting: "等待匹配", paused: "暂不匹配", matched: "已匹配", confirmed: "已确认",
   playing: "游戏中", completed: "已完成", preparing: "准备中",
 };
 
@@ -29,9 +31,9 @@ export default function RoomPage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [me, setMe] = useState<Participant | null>(null);
-  const [quizStep, setQuizStep] = useState(0);
-  const [answers, setAnswers] = useState({ goal: "", style: "", fun: "", ideal: "" });
-  const [saving, setSaving] = useState(false);
+  const [editingQuiz, setEditingQuiz] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusError, setStatusError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -80,17 +82,16 @@ export default function RoomPage() {
     }
   }, [myMatch, router]);
 
-  async function saveQuiz() {
+  async function setMatchingStatus(status: "waiting" | "paused") {
     if (!me) return;
-    setSaving(true);
+    setStatusBusy(true); setStatusError("");
     try {
-      await fetch(`/api/participants/${me.id}/profile`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
-      });
+      const res = await fetch(`/api/participants/${me.id}/profile`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchingStatus: status }) });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "状态更新失败");
       await load();
-    } finally { setSaving(false); }
+    } catch (cause) { setStatusError(cause instanceof Error ? cause.message : "状态更新失败"); }
+    finally { setStatusBusy(false); }
   }
 
   async function uploadPhoto(file: File) {
@@ -127,13 +128,6 @@ export default function RoomPage() {
     } finally { setSending(false); }
   }
 
-  const QUIZ = [
-    { key: "goal", q: "今晚你想获得什么？", options: ["认识朋友", "深度聊天", "一起玩", "寻找心动搭子"] },
-    { key: "style", q: "你更像哪一种牛牛？", options: ["气氛组", "观察者", "冒险家", "倾听者"] },
-    { key: "fun", q: "什么互动最让你开心？", options: ["搞笑", "走心", "竞争", "合作"] },
-    { key: "ideal", q: "用一句话描述理想中的今晚", options: null as string[] | null },
-  ];
-
   if (!me) return (
     <main className="min-h-screen flex items-center justify-center px-6">
       <div className="text-center">
@@ -144,7 +138,8 @@ export default function RoomPage() {
     </main>
   );
 
-  const profileDone = me.answers && Object.keys(me.answers).length > 0;
+  const profileDone = Boolean(me.answers?.q1 && me.answers?.q2 && me.answers?.q5?.length);
+  const readyCount = participants.filter((p) => p.status === "waiting" && p.answers?.q1 && p.answers?.q2 && p.answers?.q5?.length).length;
 
   return (
     <main className="min-h-screen px-4 py-8 max-w-md mx-auto">
@@ -167,83 +162,59 @@ export default function RoomPage() {
         </div>
       </section>
 
-      {/* 问答区（未回答时显示） */}
-      {(!me.answers || Object.keys(me.answers).length === 0) && quizStep < QUIZ.length && (
-        <section className="bg-[#1d1915] border border-amber-800/40 rounded-3xl p-6 mb-5">
-          <p className="text-xs text-amber-300/70 mb-1">第 {quizStep + 1} / {QUIZ.length} 题</p>
-          <h2 className="font-bold text-lg text-amber-100 mb-4">{QUIZ[quizStep].q}</h2>
-          {QUIZ[quizStep].options ? (
-            <div className="space-y-2 mb-4">
-              {(QUIZ[quizStep].options || []).map((opt) => (
-                <button key={opt}
-                  onClick={() => { setAnswers((a) => ({ ...a, [QUIZ[quizStep].key]: opt })); setQuizStep((s) => s + 1); }}
-                  className="w-full text-left px-4 py-3 rounded-xl bg-[#2a241f] text-amber-100 hover:bg-amber-800/40 transition">
-                  {opt}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="mb-4">
-              <input value={answers.ideal}
-                onChange={(e) => setAnswers((a) => ({ ...a, ideal: e.target.value }))}
-                placeholder="例如：认识几个有趣的人，一起玩点游戏"
-                className="w-full bg-[#2a241f] text-amber-100 placeholder-amber-300/40 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-500/50" />
-              <button onClick={() => setQuizStep((s) => s + 1)} disabled={!answers.ideal.trim()}
-                className="mt-3 w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-bold py-3 rounded-xl transition">
-                下一题
-              </button>
-            </div>
-          )}
+      {(!profileDone || editingQuiz) && !myMatch && <QuizForm key={me.id} participantId={me.id} initial={me.answers} onSaved={async () => { setEditingQuiz(false); await load(); }} />}
+
+      {profileDone && !myMatch && !editingQuiz && (
+        <section className="bg-[#1d1915] border border-amber-800/40 rounded-3xl p-5 mb-5 space-y-4">
+          <div>
+            <h2 className="font-bold text-amber-100">今晚的你</h2>
+            <div className="flex flex-wrap gap-1.5 mt-2">{me.tags?.map((tag) => <span key={tag} className="bg-amber-500/15 text-amber-300 rounded-full text-xs px-2 py-1">{tag}</span>)}</div>
+          </div>
+          <div className="bg-[#2a241f] rounded-xl p-3 text-sm text-amber-100/80">
+            <p>当前选择：双人匹配 · {me.status === "paused" ? "暂不参与" : "等待主理人开始匹配"}</p>
+            <p className="text-xs text-amber-300/60 mt-1">当前等待 {readyCount} 人。{readyCount < 2 ? "人数不足，等更多牛牛完成问答。" : "若暂未匹配，可能是偏好尚未合拍；可继续等待或调整答案。"}</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setEditingQuiz(true)} className="flex-1 bg-[#2a241f] py-2 rounded-xl text-xs">调整问卷偏好</button>
+            <button disabled={statusBusy} onClick={() => setMatchingStatus(me.status === "paused" ? "waiting" : "paused")} className="flex-1 bg-[#2a241f] py-2 rounded-xl text-xs disabled:opacity-50">{me.status === "paused" ? "重新参与匹配" : "退出等待"}</button>
+          </div>
+          {statusError && <p className="text-red-400 text-xs">{statusError}</p>}
         </section>
       )}
 
-      {/* 已答完 → 保存并提示上传照片 */}
-      {(!me.answers || Object.keys(me.answers).length === 0) && quizStep >= QUIZ.length && (
-        <section className="bg-[#1d1915] border border-amber-800/40 rounded-3xl p-6 mb-5">
-          <h2 className="font-bold text-lg text-amber-100 mb-2">回答完成 🎉</h2>
-          <p className="text-sm text-amber-300/80 mb-4">上传一张照片，让配对成功后对方能看到真实的你。</p>
-          <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])} className="hidden" id="photo-input" />
-          <label htmlFor="photo-input" className="block w-full text-center bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 rounded-xl cursor-pointer transition">
-            {uploading ? "上传中..." : "上传照片"}
-          </label>
-          <button onClick={saveQuiz} disabled={saving}
-            className="mt-3 w-full bg-[#2a241f] hover:bg-[#332b25] text-amber-100 font-bold py-3 rounded-xl transition">
-            {saving ? "保存中..." : "先保存问答"}
-          </button>
+      {profileDone && !myMatch && (
+        <section className="bg-[#1d1915] border border-amber-800/40 rounded-3xl p-5 mb-5">
+          <h2 className="font-bold text-amber-100">人数选择</h2>
+          <p className="text-xs text-amber-300/70 mt-1">双人模式已开放；多人模式入口将在后续版本启用。</p>
+          <div className="grid grid-cols-2 gap-2 mt-3">
+            <div className="bg-amber-500 text-black rounded-xl py-3 text-center font-bold text-sm">双人匹配 ✓</div>
+            <button disabled className="bg-[#2a241f] text-amber-300/50 rounded-xl py-3 text-sm cursor-not-allowed">多人匹配 · 即将开放</button>
+          </div>
         </section>
       )}
 
-      {/* 已回答 → 提示上传照片或等待匹配 */}
       {profileDone && !me.photo_uploaded && (
-        <section className="bg-[#1d1915] border border-amber-800/40 rounded-3xl p-6 mb-5">
-          <h2 className="font-bold text-lg text-amber-100 mb-2">还差一步</h2>
-          <p className="text-sm text-amber-300/80 mb-4">上传一张照片，才能进入匹配池。</p>
+        <section className="bg-[#1d1915] border border-amber-800/40 rounded-3xl p-5 mb-5">
+          <h2 className="font-bold text-amber-100">上传一张今晚的照片（可选）</h2>
+          <p className="text-xs text-amber-300/70 mt-1 mb-3">可以是你自己、身边的物品或现场环境。双方确认后才解锁；不上传也能参与匹配。</p>
           <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])} className="hidden" id="photo-input" />
-          <label htmlFor="photo-input" className="block w-full text-center bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 rounded-xl cursor-pointer transition">
-            {uploading ? "上传中..." : "上传照片"}
-          </label>
-        </section>
-      )}
-
-      {profileDone && me.photo_uploaded && !myMatch && (
-        <section className="bg-[#1d1915] border border-amber-800/40 rounded-3xl p-4 mb-5 text-center">
-          <p className="text-sm text-amber-300/80">✅ 资料已完成，等待主理人开始匹配...</p>
-          <p className="text-xs text-amber-300/50 mt-1">可以先在下方和大家聊聊天</p>
+          <label htmlFor="photo-input" className="block w-full text-center bg-[#2a241f] text-amber-100 py-2.5 rounded-xl cursor-pointer">{uploading ? "上传中..." : "选择照片"}</label>
         </section>
       )}
 
       {/* 匹配结果 */}
       {myMatch && (myMatch.status === "pending" || myMatch.status === "waiting") && (
         <section className="bg-gradient-to-b from-amber-800/25 to-[#1d1915] border border-amber-700/50 rounded-3xl p-6 mb-5">
-          <p className="text-xs text-amber-500 font-bold mb-2">🎉 AI 为你找到了搭子</p>
+          <p className="text-xs text-amber-500 font-bold mb-2">🎉 为你找到了今晚的搭子</p>
           <div className="flex items-center gap-3 mb-3">
             <span className="text-3xl">{partner?.avatar || AVATAR_FALLBACK}</span>
             <div>
               <p className="font-bold text-amber-100">{partner?.nickname || "牛牛"}</p>
-              <p className="text-xs text-amber-300/70">匹配分 {myMatch.score}</p>
+              <p className="text-xs text-amber-300/70">共同活动：{myMatch.anchor || "轻松破冰"}</p>
             </div>
           </div>
           <p className="text-sm text-amber-100/80 leading-relaxed mb-4">{myMatch.reason}</p>
+          <p className="text-xs text-amber-300/70 mb-4">建议：{myMatch.icebreaker}</p>
           <button onClick={() => router.push(`/match/${myMatch.id}`)}
             className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 rounded-xl transition">
             查看并确认
@@ -294,7 +265,7 @@ export default function RoomPage() {
       {/* 牛牛广场（点击查看资料，不能组队） */}
       <section className="mb-10">
         <h2 className="text-sm font-bold text-amber-300 mb-1">🌾 牛牛广场</h2>
-        <p className="text-[11px] text-amber-300/50 mb-2">点击牛牛查看资料 · 组队只能由 AI 匹配决定</p>
+        <p className="text-[11px] text-amber-300/50 mb-2">点击牛牛查看今晚标签 · 主理人统一开启双人匹配</p>
         <div className="relative h-80 rounded-3xl overflow-hidden border border-amber-800/40 bg-gradient-to-b from-[#1c2a33] via-[#243d28] to-[#3a5227]">
           {/* 夜空与月牙 */}
           <div className="absolute top-3 right-5 text-2xl select-none">🌙</div>
@@ -317,7 +288,7 @@ export default function RoomPage() {
           <span className="grass-sway absolute text-lg select-none" style={{ left: "92%", bottom: "8%", animationDelay: "1.6s" }}>🌿</span>
 
           {/* 牛牛们 */}
-          {participants.map((p, i) => {
+          {participants.map((p) => {
             const hash = [...p.id].reduce((acc, c) => acc + c.charCodeAt(0), 0);
             const x = 12 + ((hash * 37) % 74);
             const y = 30 + ((hash * 53) % 42);
@@ -357,21 +328,18 @@ export default function RoomPage() {
               </div>
             </div>
             <div className="border-t border-amber-800/30 pt-4 space-y-3 text-sm">
-              {viewBull.answers ? (
+              {viewBull.answers?.q1 ? (
                 <>
-                  <p className="text-amber-300/80"><span className="text-amber-500/70">今晚目标：</span>{viewBull.answers.goal || "—"}</p>
-                  <p className="text-amber-300/80"><span className="text-amber-500/70">牛牛风格：</span>{viewBull.answers.style || "—"}</p>
-                  <p className="text-amber-300/80"><span className="text-amber-500/70">喜欢互动：</span>{viewBull.answers.fun || "—"}</p>
-                  {viewBull.answers.ideal && (
-                    <p className="text-amber-300/80"><span className="text-amber-500/70">理想今晚：</span>{viewBull.answers.ideal}</p>
-                  )}
+                  <p className="text-amber-300/80"><span className="text-amber-500/70">今晚想做：</span>{viewBull.answers.q5?.join("、") || "—"}</p>
+                  <p className="text-amber-300/80"><span className="text-amber-500/70">兴趣：</span>{viewBull.answers.q8?.filter((v) => v !== "其他").join("、") || "尚未填写"}</p>
+                  <div className="flex flex-wrap gap-1">{viewBull.tags?.map((tag) => <span key={tag} className="text-xs bg-amber-500/15 text-amber-300 px-2 py-1 rounded-full">{tag}</span>)}</div>
                 </>
               ) : (
                 <p className="text-amber-300/60">这头牛牛还没完成问答</p>
               )}
             </div>
             <p className="text-[11px] text-amber-300/40 bg-amber-900/20 rounded-xl px-3 py-2 leading-relaxed">
-              🤖 组队由 AI 根据问答与偏好统一匹配，暂时不能手动组队。等主理人开始匹配后，你可能会和 TA 成为搭子。
+              配对根据今晚的问答偏好计算。等主理人开始匹配后，双方可决定是否认识。
             </p>
             <button onClick={() => setViewBull(null)}
               className="w-full bg-[#2a241f] hover:bg-[#332b25] text-amber-100 py-2.5 rounded-xl text-sm font-bold transition">

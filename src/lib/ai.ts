@@ -7,7 +7,7 @@ interface AIResult {
 
 const FALLBACK_TAGS = ["今晚玩家", "轻松社交", "牛牛好奇中"];
 
-async function chat(messages: Array<{ role: string; content: string | any[] }>, maxTokens: number, temperature = 0.8): Promise<string | null> {
+async function chat(messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }>, maxTokens: number, temperature = 0.8): Promise<string | null> {
   if (!process.env.OPENAI_API_KEY) return null;
   try {
     const res = await fetch(`${process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"}/chat/completions`, {

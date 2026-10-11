@@ -5,7 +5,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const { id } = await ctx.params;
     const sb = getSupabase();
-    const { data: match } = await sb.from("matches").select("*").eq("id", id).maybeSingle();
+    const { data: match } = await sb.from("matches").select("id,participant_a,participant_b,status,reason,anchor,icebreaker,confirmed_a,confirmed_b").eq("id", id).maybeSingle();
     if (!match) return NextResponse.json({ error: "匹配不存在" }, { status: 404 });
     const { data: participants } = await sb
       .from("participants").select("id,nickname,avatar,tags,photo_uploaded,status")

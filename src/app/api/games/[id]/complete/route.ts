@@ -49,7 +49,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     // AI 故事 + 总评
     const summary = plan.map((s) => {
-      const a = answers[String(s.stage)];
       const f = fb[String(s.stage)];
       return `[${s.title}] ${s.text} → ${f ? `${f.aName}&${f.bName}：${f.comment}（默契${f.sync}）` : "已完成"}`;
     }).join("；");
@@ -57,7 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const review = await aiGameReview(pa, pb, { ...answers, feedback: fb });
 
     // 总默契分
-    const scores = Object.values(fb).map((f: any) => f.sync || 0);
+    const scores = Object.values(fb as Record<string, { sync?: number }>).map((f) => f.sync || 0);
     const totalSync = scores.length ? Math.round(scores.reduce((x: number, y: number) => x + y, 0) / scores.length) : 60;
 
     const reward = REWARD_POOL[Math.floor(Math.random() * REWARD_POOL.length)];

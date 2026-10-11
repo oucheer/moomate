@@ -23,10 +23,11 @@ export default function HostPage() {
   const [resetting, setResetting] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoDone, setDemoDone] = useState(false);
+  const [matchMessage, setMatchMessage] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/host/${roomId}`);
+      const res = await fetch(`/api/host/${roomId}`, { headers: { "x-host-token": localStorage.getItem(`host_${roomId}`) || "" } });
       if (!res.ok) throw new Error("加载失败");
       const json = await res.json();
       setRoom(json.room);
@@ -35,7 +36,7 @@ export default function HostPage() {
       setGames(json.games || []);
       setQr(json.qrDataUrl || "");
       setJoinUrl(json.joinUrl || "");
-    } catch (e: any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "加载失败"); }
     finally { setLoading(false); }
   }, [roomId]);
 
@@ -51,8 +52,9 @@ export default function HostPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "匹配失败");
+      setMatchMessage(json.message || "");
       await load();
-    } catch (e: any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "匹配失败"); }
     finally { setMatching(false); }
   }
 
@@ -66,7 +68,7 @@ export default function HostPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "核销失败");
       await load();
-    } catch (e: any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "核销失败"); }
   }
 
   async function injectDemo() {
@@ -80,7 +82,7 @@ export default function HostPage() {
       if (!res.ok) throw new Error(json.error || "注入失败");
       setDemoDone(true);
       await load();
-    } catch (e: any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "注入失败"); }
     finally { setDemoLoading(false); }
   }
 
@@ -96,7 +98,7 @@ export default function HostPage() {
       if (!res.ok) throw new Error(json.error || "重置失败");
       setDemoDone(false);
       await load();
-    } catch (e: any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "重置失败"); }
     finally { setResetting(false); }
   }
 
@@ -130,7 +132,7 @@ export default function HostPage() {
         </div>
         <div className="bg-[#1d1915] border border-amber-900/40 rounded-2xl p-4">
           <p className="text-3xl font-bold text-amber-400">{matches.length}</p>
-          <p className="text-xs text-amber-300/80 mt-1">已生成匹配</p>
+          <p className="text-xs text-amber-300/80 mt-1">双人匹配</p>
         </div>
       </div>
 
@@ -139,8 +141,10 @@ export default function HostPage() {
         disabled={matching}
         className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold py-3.5 rounded-xl mb-6 transition disabled:opacity-50"
       >
-        {matching ? "AI 匹配中..." : "开始 AI 匹配"}
+        {matching ? "匹配中..." : "开始双人匹配"}
       </button>
+      <p className="text-xs text-amber-300/60 text-center -mt-4 mb-5">多人匹配即将开放 · 暂仅双人模式</p>
+      {matchMessage && <p role="status" className="text-xs text-amber-300 text-center mb-5">{matchMessage}</p>}
       <div className="grid grid-cols-2 gap-3 mb-6">
         <button
           onClick={injectDemo}
@@ -159,7 +163,7 @@ export default function HostPage() {
       </div>
       {demoDone && virtualCount > 0 && (
         <p className="text-xs text-emerald-300/70 text-center mb-4 -mt-3">
-          已有 {virtualCount} 头演示牛牛在广场等你，可直接点上方「开始 AI 匹配」
+          已有 {virtualCount} 头演示牛牛在广场等你，可直接点上方「开始双人匹配」
         </p>
       )}
       {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
@@ -173,7 +177,7 @@ export default function HostPage() {
               <div className="flex-1">
                 <p className="font-medium">{p.nickname}</p>
                 <p className="text-xs text-amber-300/70">
-                  {p.photo_uploaded ? "已上传照片" : "未上传"} · {p.status === "waiting" ? "等待匹配" : p.status === "matched" ? "已找到搭子" : p.status === "confirmed" ? "已确认" : p.status === "playing" ? "游戏中" : p.status === "completed" ? "已完成" : "匹配中"}
+                  {p.photo_uploaded ? "已上传照片" : "未上传照片"} · {p.status === "paused" ? "暂不匹配" : p.status === "waiting" ? "等待匹配" : p.status === "matched" ? "已找到搭子" : p.status === "confirmed" ? "已确认" : p.status === "playing" ? "游戏中" : p.status === "completed" ? "已完成" : "匹配中"}
                 </p>
               </div>
             </div>
@@ -193,7 +197,7 @@ export default function HostPage() {
                 </p>
                 <p className="text-xs text-amber-300/70 mt-1">{m.reason}</p>
                 <p className="text-[10px] text-amber-300/50 mt-1">
-                  状态：{m.status === "pending" ? "待确认" : m.status === "confirmed" ? "已确认" : m.status === "completed" ? "已完成" : "已拒绝"} · 匹配分 {m.score}
+                  状态：{m.status === "pending" ? "待确认" : m.status === "confirmed" ? "已确认" : m.status === "completed" ? "已完成" : "已拒绝"}
                 </p>
                 {(() => {
                   const g = games.find((x) => x.match_id === m.id);

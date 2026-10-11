@@ -24,8 +24,8 @@ export default function HomePage() {
       if (!res.ok) throw new Error(json.error || "创建失败");
       localStorage.setItem(`host_${json.room.id}`, json.hostToken);
       router.push(`/host/${json.room.id}`);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "创建失败");
     } finally {
       setLoading(false);
     }

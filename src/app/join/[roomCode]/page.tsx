@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import type { Gender, GenderPreference } from "@/types";
 
 const AVATARS = ["🐮", "🐄", "🐂", "🐃"];
 
@@ -11,14 +10,12 @@ export default function JoinPage() {
   const router = useRouter();
   const [nickname, setNickname] = useState("");
   const [avatar, setAvatar] = useState("🐮");
-  const [gender, setGender] = useState<Gender>("secret");
-  const [pref, setPref] = useState<GenderPreference>("any");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const savedId = localStorage.getItem(`participant_${roomCode}`);
-    if (savedId) {
+    if (savedId && localStorage.getItem(`moomate_auth_${savedId}`)) {
       fetch(`/api/participants/${savedId}`).then(async (r) => {
         if (r.ok) {
           const j = await r.json();
@@ -34,14 +31,15 @@ export default function JoinPage() {
       const res = await fetch(`/api/rooms/${roomCode}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nickname, avatar, gender, gender_preference: pref }),
+        body: JSON.stringify({ nickname, avatar }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "加入失败");
       localStorage.setItem(`participant_${roomCode}`, json.participant.id);
+      localStorage.setItem(`moomate_auth_${json.participant.id}`, json.token);
       localStorage.setItem('moomate_me', json.participant.id);
       router.replace(`/room/${json.participant.room_id}`);
-    } catch (e: any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "加入失败"); }
     finally { setLoading(false); }
   }
 
@@ -71,31 +69,15 @@ export default function JoinPage() {
           </div>
         </div>
         <div>
-          <label className="text-sm text-amber-300 mb-1 block">你的性别</label>
-          <div className="flex gap-2">
-            {([["male", "男"], ["female", "女"], ["secret", "不愿透露"]] as const).map(([v, label]) => (
-              <button key={v} onClick={() => setGender(v)}
-                className={`flex-1 py-2.5 rounded-xl text-sm transition ${gender === v ? "bg-amber-500 text-black font-bold" : "bg-[#12100e] border border-amber-900/40 text-amber-100"}`}>
-                {label}
-              </button>
-            ))}
+          <p className="text-sm text-amber-300 mb-2">今晚想怎样匹配？</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-amber-500 text-black font-bold text-center rounded-xl py-3 text-sm">双人玩伴 ✓</div>
+            <button type="button" disabled className="bg-[#12100e] border border-amber-900/40 text-amber-300/50 rounded-xl py-3 text-sm cursor-not-allowed">多人组队 · 即将开放</button>
           </div>
         </div>
-        <div>
-          <label className="text-sm text-amber-300 mb-1 block">希望匹配的性别</label>
-          <div className="flex gap-2">
-            {([["female", "女生"], ["male", "男生"], ["any", "不限"]] as const).map(([v, label]) => (
-              <button key={v} onClick={() => setPref(v)}
-                className={`flex-1 py-2.5 rounded-xl text-sm transition ${pref === v ? "bg-amber-500 text-black font-bold" : "bg-[#12100e] border border-amber-900/40 text-amber-100"}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="bg-amber-900/20 border border-amber-800/40 rounded-xl p-3">
           <p className="text-xs text-amber-300 leading-relaxed">
-            📸 参与匹配需要上传一张自己的照片。照片仅用于本次房间，双方互相确认后才能解锁查看。房间其他人无法看到你的照片。
+            入场后可上传自己、物品或现场环境的照片，也可以不上传。完成轻量问答即可参与双人匹配。
           </p>
         </div>
 

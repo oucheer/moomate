@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { aiTagsFromQuiz } from "@/lib/ai";
+import { tagsFromAnswers, validateAnswers } from "@/lib/quiz";
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -16,9 +16,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.gender) updates.gender = body.gender;
     if (body.gender_preference) updates.gender_preference = body.gender_preference;
     if (body.answers) {
-      updates.answers = body.answers;
-      updates.tags = await aiTagsFromQuiz(body.answers);
-      updates.ai_profile = { extracted: true };
+      if (existing.match_id) return NextResponse.json({ error: "已匹配后不能修改问卷" }, { status: 409 });
+      const checked = validateAnswers(body.answers);
+      if (checked.error) return NextResponse.json({ error: checked.error }, { status: 400 });
+      updates.answers = checked.answers;
+      updates.tags = tagsFromAnswers(checked.answers!);
+      updates.ai_profile = { source: "quiz-v2" };
+    }
+    if (body.matchingStatus === "paused" || body.matchingStatus === "waiting") {
+      if (existing.match_id) return NextResponse.json({ error: "已匹配后不能退出等待" }, { status: 409 });
+      updates.status = body.matchingStatus;
     }
 
     const { data, error } = await sb.from("participants").update(updates).eq("id", id).select().single();

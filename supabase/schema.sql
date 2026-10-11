@@ -26,6 +26,7 @@ create table if not exists participants (
   match_id uuid,
   answers jsonb,
   ai_profile jsonb,
+  access_token_hash text,
   is_virtual boolean not null default false,
   created_at timestamptz default now()
 );
@@ -38,6 +39,8 @@ create table if not exists matches (
   status text not null default 'pending',
   score numeric not null default 0,
   reason text not null default '',
+  anchor text not null default '',
+  icebreaker text not null default '',
   confirmed_a boolean not null default false,
   confirmed_b boolean not null default false,
   created_at timestamptz default now()
@@ -67,3 +70,5 @@ create policy "public read matches" on matches for select using (true);
 create policy "public read games" on games for select using (true);
 
 -- writes should go through service-role API routes
+-- After creating a fresh database, run migrations/20261011_party_matching.sql for the atomic matching function.
+-- Existing deployments must run that migration for the new match columns as well.
